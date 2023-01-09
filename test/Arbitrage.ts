@@ -12,6 +12,7 @@ describe("Arbitrage",  () =>{
 
     const ROUTER_ADDRESS: string = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
     let singleSwap: Contract;
+    let weth9: Contract;
 
     const abi = [
         "function swapExactInputSingle(" +
@@ -24,35 +25,72 @@ describe("Arbitrage",  () =>{
         "external returns (uint256 amountOut)"
     ];
 
-    let deploySingleSwap = async () => {
+    const WETH9ABI = [
+        {
+            "name": "deposit",
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "payable",
+            "type": "function"
+        },
+        {
+            name: 'balanceOf',
+            type: 'function',
+            inputs: [
+                {
+                    name: '_owner',
+                    type: 'address',
+                },
+            ],
+            outputs: [
+                {
+                    name: 'balance',
+                    type: 'uint256',
+                },
+            ],
+            constant: true,
+            payable: false,
+        }
+    ];
+
+    before( (done) => {
+        exchangeEthForWeth().then(() => done())
+    })
+
+    let exchangeEthForWeth = async () => {
         const nodeUrl = process.env.NODE_URL;
         if (!nodeUrl){
             console.log("Node URL not set!");
             process.exit(1);
         }
-        const provider = await ethers.getDefaultProvider(nodeUrl);
+        const provider = ethers.getDefaultProvider(nodeUrl);
         const privateKey = process.env.PRIVATE_KEY;
         if (!privateKey){
             console.log("Private key not set!");
             process.exit(1);
         }
         const wallet = new ethers.Wallet(privateKey, provider);
-        const account = wallet.connect(provider);
+        // const account = wallet.connect(provider);
+        weth9 = new ethers.Contract(WETH_ADDRESS, WETH9ABI, wallet);
+        const tx = await weth9.deposit({value: ethers.utils.parseEther('100')});
+        const receipt = await tx.wait();
+        console.log((`Receipt transaction hash: ${receipt["transactionHash"]}`));
 
-        const SingleSwap = await ethers.getContractFactory("SingleSwap", account);
-        singleSwap = await SingleSwap.deploy(ROUTER_ADDRESS);
-        singleSwap = new ethers.Contract(singleSwap.address, abi, wallet);
 
-        return singleSwap;
+        const balance = await weth9.balanceOf(wallet.address);
+
+        console.log(`Balance: ${balance.toString()}`);
     }
 
-    // Refactor this to simply create the trade using the SDK and the pool
-    describe("It should deploy the SingleSwap contract", async () => {
-        if(singleSwap == null){
-            singleSwap = await loadFixture(deploySingleSwap);
-        }
 
-        singleSwap.swapExactInputSingle()
+    describe("It should run a pair exchange", async () => {
+
+        it('Should wait for the setup to complete', async () => {
+            if (weth9 == null){
+                await loadFixture(exchangeEthForWeth);
+            }
+
+        })
     })
 
 });
